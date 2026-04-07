@@ -1,11 +1,6 @@
 pipeline {
     agent any
 
-    environment {
-        SONAR_TOKEN = credentials('sonar-token')
-        SONAR_HOST_URL = 'http://192.168.119.129:9000'
-    }
-
     stages {
         stage('Checkout SCM') {
             steps {
@@ -33,14 +28,29 @@ pipeline {
 
         stage('SonarQube Scan') {
             steps {
-                sh '''
-                    npx sonar-scanner \
-                    -Dsonar.projectKey=student1-vuln-demo \
-                    -Dsonar.projectName=student1-vuln-demo \
-                    -Dsonar.sources=. \
-                    -Dsonar.host.url=$SONAR_HOST_URL \
-                    -Dsonar.token=$SONAR_TOKEN
-                '''
+                withSonarQubeEnv('sonarqube-server') {
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                        sh '''
+                        sonar-scanner \
+                        -Dsonar.projectKey=student1-vuln-demo \
+                        -Dsonar.projectName=student1-vuln-demo \
+                        -Dsonar.projectVersion=1.0 \
+                        -Dsonar.sources=. \
+                        -Dsonar.inclusions=app.js \
+                        -Dsonar.sourceEncoding=UTF-8 \
+                        -Dsonar.host.url=http://192.168.119.129:9000 \
+                        -Dsonar.login=$SONAR_TOKEN
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
             }
         }
 
@@ -52,8 +62,8 @@ pipeline {
 
         stage('Run App') {
             steps {
-                sh 'docker rm -f student1-app || true'
-                sh 'docker run -d --name student1-app -p 3003:3000 student1-vuln-demo:latest'
+                sh 'docker rm -f student1-vuln-app || true'
+                sh 'docker run -d --name student1-vuln-app -p 3001:3000 student1-vuln-demo:latest'
             }
         }
 
